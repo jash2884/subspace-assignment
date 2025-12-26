@@ -24,11 +24,8 @@ function App() {
 
   useEffect(() => {
     const savedApiKey = localStorage.getItem("deepgram_api_key");
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    } else {
-      setShowSettings(true);
-    }
+    if (savedApiKey) setApiKey(savedApiKey);
+    else setShowSettings(true);
 
     audioServiceRef.current = new AudioService();
     requestMicrophoneAccess();
@@ -39,16 +36,11 @@ function App() {
     };
   }, []);
 
-  const requestMicrophoneAccess = async (): Promise<boolean> => {
+  const requestMicrophoneAccess = async () => {
     if (!audioServiceRef.current) return false;
-
     const granted = await audioServiceRef.current.requestMicrophonePermission();
     setMicPermissionGranted(granted);
-
-    if (!granted) {
-      setError("Microphone permission denied.");
-    }
-
+    if (!granted) setError("Microphone permission denied");
     return granted;
   };
 
@@ -56,12 +48,7 @@ function App() {
     if (isFinal) {
       setSegments((prev) => [
         ...prev,
-        {
-          id: Date.now().toString(),
-          text,
-          timestamp: Date.now(),
-          isFinal: true,
-        },
+        { id: crypto.randomUUID(), text, timestamp: Date.now(), isFinal: true },
       ]);
       setInterimText("");
     } else {
@@ -69,11 +56,11 @@ function App() {
     }
   }, []);
 
-  const handleError = useCallback((err: Error) => {
+  const handleError = (err: Error) => {
     setError(err.message);
     setRecordingState(RecordingState.ERROR);
     setIsConnected(false);
-  }, []);
+  };
 
   const startRecording = async () => {
     if (!apiKey) {
@@ -86,28 +73,20 @@ function App() {
       if (!granted) return;
     }
 
-    setError(null);
     setRecordingState(RecordingState.RECORDING);
+    setError(null);
 
     deepgramServiceRef.current?.disconnect();
     deepgramServiceRef.current = new DeepgramService(apiKey);
 
-    const deepgram = deepgramServiceRef.current;
-    const connected = deepgram.connect(handleTranscript, handleError);
+    const dg = deepgramServiceRef.current;
+    dg.connect(handleTranscript, handleError);
 
-    if (!connected) {
-      setRecordingState(RecordingState.ERROR);
-      return;
-    }
-
-    const waitForSocket = setInterval(() => {
-      if (deepgram.isConnected()) {
-        clearInterval(waitForSocket);
+    const wait = setInterval(() => {
+      if (dg.isConnected()) {
+        clearInterval(wait);
         setIsConnected(true);
-
-        audioServiceRef.current?.startRecording((pcm) => {
-          deepgram.sendAudio(pcm);
-        });
+        audioServiceRef.current?.startRecording((pcm) => dg.sendAudio(pcm));
       }
     }, 50);
   };
@@ -115,56 +94,47 @@ function App() {
   const stopRecording = () => {
     setRecordingState(RecordingState.PROCESSING);
     audioServiceRef.current?.stopRecording();
-
     setTimeout(() => {
       deepgramServiceRef.current?.disconnect();
       setIsConnected(false);
       setRecordingState(RecordingState.IDLE);
     }, 3000);
   };
-
-  const handleSaveApiKey = () => {
-    if (!apiKey.trim()) return;
-    localStorage.setItem("deepgram_api_key", apiKey.trim());
-    setShowSettings(false);
-  };
-
   const handleClearTranscript = () => {
     setSegments([]);
     setInterimText("");
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-medium tracking-tight text-gray-900">
-            Voice to Text
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
+      <div className="w-full max-w-xl rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl p-6 text-white">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-semibold tracking-wide">
+            🎙 Voice to Text
           </h1>
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="p-2 rounded-md hover:bg-gray-100"
+            className="p-2 rounded-lg hover:bg-white/10"
           >
-            <Settings className="w-5 h-5 text-gray-600" />
+            <Settings size={18} />
           </button>
         </div>
 
-        {/* Settings */}
         {showSettings && (
-          <div className="mb-6 border rounded-lg p-4">
-            <label className="block text-sm mb-2 text-gray-700">
-              Deepgram API Key
-            </label>
+          <div className="mb-4 bg-black/30 p-4 rounded-xl">
+            <label className="text-sm opacity-80">Deepgram API Key</label>
             <input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md text-sm"
+              className="mt-2 w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 outline-none"
             />
             <button
-              onClick={handleSaveApiKey}
-              className="mt-3 w-full bg-black text-white py-2 rounded-md text-sm"
+              onClick={() => {
+                localStorage.setItem("deepgram_api_key", apiKey);
+                setShowSettings(false);
+              }}
+              className="mt-3 w-full bg-indigo-600 hover:bg-indigo-500 transition rounded-lg py-2"
             >
               Save
             </button>
@@ -177,27 +147,20 @@ function App() {
           error={error}
         />
 
-        {/* Transcript */}
-        <div className="my-6 h-[280px] border rounded-lg p-4 overflow-y-auto">
-          <TranscriptDisplay segments={segments} interimText={interimText} />
+        <div className="mt-4 h-64 overflow-y-auto rounded-xl bg-black/30 p-4 space-y-2">
+          <TranscriptDisplay
+            segments={segments}
+            interimText={interimText}
+            onClear={handleClearTranscript}
+          />
         </div>
 
-        {/* Controls */}
-        <div className="flex flex-col items-center gap-3">
+        <div className="mt-6 flex justify-center">
           <RecordButton
             recordingState={recordingState}
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
           />
-
-          {segments.length > 0 && (
-            <button
-              onClick={handleClearTranscript}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              Clear transcript
-            </button>
-          )}
         </div>
       </div>
     </div>

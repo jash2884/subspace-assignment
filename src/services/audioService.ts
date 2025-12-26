@@ -21,7 +21,7 @@ export class AudioService {
     this.audioContext = new AudioContext({ sampleRate: 48000 });
 
     this.source = this.audioContext.createMediaStreamSource(this.stream);
-    this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+    this.processor = this.audioContext.createScriptProcessor(2048, 1, 1);
 
     this.processor.onaudioprocess = (event) => {
       const input = event.inputBuffer.getChannelData(0);
